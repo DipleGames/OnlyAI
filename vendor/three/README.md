@@ -1,0 +1,1 @@
+Three.js 0.180.0, MIT license. Files copied without modification from the official npm package `three@0.180.0` using npm pack (registry integrity verification enabled). Kept locally so Live Server needs no npm install or CDN access.
