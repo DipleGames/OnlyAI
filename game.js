@@ -1,30 +1,29 @@
 import {hitResult} from './physics.js';
+import {swingPose,swingContactDelay,isBigHit} from './batting.js';
 const $ = id => document.getElementById(id);
 const canvas=$('field'),ctx=canvas.getContext('2d');
 let best=0;try{best=Number(localStorage.getItem('onlyai-best'))||0;}catch{}
 $('best').innerHTML=`${best} <small>m</small>`;
 let state='idle',start=0,swungAt=-99,flightAt=0,shots=0,lane=0,outcome=null,now=0;
 const pitchDuration=1.6,contactTime=1.27;
-const swingContactDelay=.095;
 const contactPoint={x:450,y:350};
-const smooth=t=>{t=Math.max(0,Math.min(1,t));return t*t*(3-2*t);};
-function swingPose(age){
- if(age<0)return {angle:-1.05,lean:0,turn:0};
- if(age<swingContactDelay){const p=smooth(age/swingContactDelay);return {angle:-1.05+1.1*p,lean:6*p,turn:.12*p};}
- if(age<.34){const p=smooth((age-swingContactDelay)/.245);return {angle:.05+2.35*p,lean:6+3*p,turn:.12+.18*p};}
- const p=smooth((age-.58)/.38);return {angle:2.4+(-1.05-2.4)*p,lean:9*(1-p),turn:.3*(1-p)};
-}
 function drawPitch(){
  const p=Math.min((now-start)/(contactTime+swingContactDelay),1.2);
  const x=472+(contactPoint.x+lane-472)*p,y=217+(contactPoint.y-217)*p;
  line(x,y,x+2,y-16,'#ffffff70',3);ball(x,y,3+3*p);
 }
 function drawBat(){
- const age=now-swungAt,pose=swingPose(age),hx=416+pose.lean,hy=346;
+ const age=now-swungAt,pose=swingPose(age),hx=416+pose.lean,hy=346+pose.gripY;
  // Draw in field coordinates so the barrel and ball share a contact plane on every screen.
  ctx.save();
- if(age>=0&&age<.34){ctx.globalAlpha=.32*(1-age/.34);ctx.beginPath();ctx.ellipse(hx,hy,66,25,0,-1.05,pose.angle);ctx.strokeStyle='#fff1ae';ctx.lineWidth=10;ctx.stroke();ctx.globalAlpha=1;}
- const tipX=hx+Math.cos(pose.angle)*66,tipY=hy+Math.sin(pose.angle)*25;
+ if(age>=0&&age<.36){
+  // Afterimages use the same outward path as the live barrel.
+  for(let i=4;i>=1;i--){const sampleAge=age-i*.018;if(sampleAge<0)continue;
+   const past=swingPose(sampleAge),gx=416+past.lean,gy=346+past.gripY;
+   ctx.globalAlpha=.055*(5-i);line(gx,gy,gx+past.tipX,gy+past.tipY,'#fff1ae',11-i);
+  }ctx.globalAlpha=1;
+ }
+ const tipX=hx+pose.tipX,tipY=hy+pose.tipY;
  line(hx,hy,tipX,tipY,'#69492e',10);
  line(hx+(tipX-hx)*.3,hy+(tipY-hy)*.3,tipX,tipY,'#edbd70',8);
  line(hx,hy,hx+(tipX-hx)*.2,hy+(tipY-hy)*.2,'#f4ebce',6);
@@ -32,7 +31,7 @@ function drawBat(){
 }
 let audio;
 const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
-function sound(hit=false){
+function sound(hit=false,big=false){
  try{
   audio??=new AudioContext();audio.resume();
   const time=audio.currentTime;
@@ -42,6 +41,7 @@ function sound(hit=false){
   oscillator.frequency.exponentialRampToValueAtTime(hit?95:65,time+.14);
   gain.gain.setValueAtTime(hit?.24:.07,time);gain.gain.exponentialRampToValueAtTime(.001,time+.18);
   oscillator.connect(gain).connect(audio.destination);oscillator.start();oscillator.stop(time+.2);
+  if(big){for(let i=0;i<3;i++){const tone=audio.createOscillator(),envelope=audio.createGain();tone.type='sine';tone.frequency.value=[523.25,659.25,783.99][i];const at=time+.1+i*.085;envelope.gain.setValueAtTime(0,at);envelope.gain.linearRampToValueAtTime(.075,at+.015);envelope.gain.exponentialRampToValueAtTime(.001,at+.3);tone.connect(envelope).connect(audio.destination);tone.start(at);tone.stop(at+.32);}}
   if(hit){const buffer=audio.createBuffer(1,audio.sampleRate*.09,audio.sampleRate);const data=buffer.getChannelData(0);for(let i=0;i<data.length;i++)data[i]=(Math.random()*2-1)*(1-i/data.length);
    const noise=audio.createBufferSource(),volume=audio.createGain();noise.buffer=buffer;volume.gain.value=.23;noise.connect(volume).connect(audio.destination);noise.start();}
  }catch{}
@@ -53,10 +53,10 @@ function action(){
   $('label').textContent='공이 배트에 다가올 때';$('result').textContent='지금이다 싶을 때, 터치!';$('buttonText').textContent='배트 휘두르기';
  }else if(state==='pitch'){
   swungAt=performance.now()/1000;shots++;$('count').textContent=`SWING ${String(shots).padStart(2,'0')}`;
-  outcome=hitResult(swungAt-start-contactTime,lane);state='flight';flightAt=swungAt+swingContactDelay;setTimeout(()=>sound(outcome.distance>0),swingContactDelay*1000);
+  outcome=hitResult(swungAt-start-contactTime,lane);state='flight';flightAt=swungAt+swingContactDelay;setTimeout(()=>sound(outcome.distance>0,isBigHit(outcome.distance)),swingContactDelay*1000);
   if(outcome.distance && navigator.vibrate)navigator.vibrate([20,15,35]);
   $('label').textContent=outcome.distance?`타이밍 ${Math.round(outcome.timing*100)}% · 중심 ${Math.round(outcome.contact*100)}%`:'조금 더 공을 기다려 보세요';
-  $('result').textContent=outcome.grade;$('buttonText').textContent='공이 날아가는 중';
+  $('result').textContent=isBigHit(outcome.distance)?'장타! '+outcome.grade:outcome.grade;$('buttonText').textContent='공이 날아가는 중';
  }
 }
 $('game').addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;action();});$('swing').addEventListener('click',action);
@@ -94,7 +94,7 @@ function player(x,y,batter=false){
  if(batter){
   // Both hands follow one shared grip instead of spinning independently.
   const scaleX=1.16*proportions,scaleY=1.16;
-  const dx=(416+pose.lean-x)/scaleX-lean,dy=(346-y)/scaleY;
+  const dx=(416+pose.lean-x)/scaleX-lean,dy=(346+pose.gripY-y)/scaleY;
   const hx=dx*Math.cos(pose.turn)+dy*Math.sin(pose.turn);
   const hy=-dx*Math.sin(pose.turn)+dy*Math.cos(pose.turn);
   line(-16,-3,-12,9,'#faf6df',11);line(-12,9,hx,hy,'#efbd91',8);
@@ -108,19 +108,29 @@ function player(x,y,batter=false){
  ctx.restore();ctx.restore();
 }
 function impact(t){
- if(!outcome?.distance||t<0||t>.6)return;
- const fade=1-t/.6,x=contactPoint.x+lane,y=contactPoint.y;
+ const big=isBigHit(outcome?.distance??0),duration=big?1.25:.6;
+ if(!outcome?.distance||t<0||t>duration)return;
+ const fade=1-t/duration,x=contactPoint.x+lane,y=contactPoint.y;
+ if(big){
+  ctx.save();
+  const glow=ctx.createRadialGradient(x,y,0,x,y,230);glow.addColorStop(0,`rgba(255,226,120,${fade*.32})`);glow.addColorStop(1,'rgba(255,226,120,0)');ctx.fillStyle=glow;ctx.fillRect(0,0,900,480);
+  ctx.globalAlpha=fade;
+  for(let ring=0;ring<3;ring++){const age=t-ring*.1;if(age<0)continue;ctx.beginPath();ctx.arc(x,y,20+age*230,0,Math.PI*2);ctx.strokeStyle=ring%2?'#fff8d1':'#ffc754';ctx.lineWidth=5*fade;ctx.stroke();}
+  for(let i=0;i<(reducedMotion?12:48);i++){const angle=i*2.39996,travel=35+t*(100+i%7*37),px=x+Math.cos(angle)*travel,py=y+Math.sin(angle)*travel+t*t*80;ctx.save();ctx.translate(px,py);ctx.rotate(angle+t*3);ctx.fillStyle=['#ffce59','#fff6bf','#e78650','#7fb7a0'][i%4];ctx.fillRect(-3,-5,6,10);ctx.restore();}
+  ctx.restore();
+ }
+
  ctx.save();ctx.globalAlpha=fade;
  ctx.strokeStyle='#ffef9d';ctx.lineWidth=4*fade;ctx.beginPath();ctx.arc(x,y,12+t*130,0,Math.PI*2);ctx.stroke();
  for(let i=0;i<16;i++){const angle=i*2.39996,travel=15+t*(100+(i%4)*60);const px=x+Math.cos(angle)*travel,py=y+Math.sin(angle)*travel+t*t*110;
  line(px,py,px+Math.cos(angle)*12*fade,py+Math.sin(angle)*12*fade,i%2?'#fff9d0':'#eba64e',3*fade);}
- ctx.translate(x,y-45-t*40);ctx.rotate(-.1);ctx.font='900 30px sans-serif';ctx.textAlign='center';ctx.strokeStyle='#315b46';ctx.lineWidth=5;const word=outcome.distance>=125?'PERFECT!':'CRACK!';ctx.strokeText(word,0,0);ctx.fillStyle='#fff5b9';ctx.fillText(word,0,0);ctx.restore();
+ ctx.translate(x,y-45-t*40);ctx.rotate(-.1);ctx.font=`900 ${big?42:30}px sans-serif`;ctx.textAlign='center';ctx.strokeStyle='#315b46';ctx.lineWidth=5;const word=big?'BIG HIT!':'CRACK!';ctx.strokeText(word,0,0);ctx.fillStyle='#fff5b9';ctx.fillText(word,0,0);ctx.restore();
 }
 function ball(x,y,r=5){ellipse(x+2,y+3,r,r,'#315b3820');ellipse(x,y,r,r,'#fffdf1');line(x-2,y-r*.6,x+1,y+r*.5,'#d87c65',1.2);}
 function frame(ms){now=ms/1000;const rect=canvas.getBoundingClientRect(),dpr=devicePixelRatio||1;if(canvas.width!==Math.round(rect.width*dpr)||canvas.height!==Math.round(rect.height*dpr)){canvas.width=Math.round(rect.width*dpr);canvas.height=Math.round(rect.height*dpr);}ctx.setTransform(canvas.width/900,0,0,canvas.height/480,0,0);
  ctx.fillStyle='#dcebd6';ctx.fillRect(0,0,900,480);
  const impactAge=now-flightAt;
- if(state==='flight'&&outcome?.distance&&!reducedMotion&&impactAge>=0&&impactAge<.22){const amount=6*(1-impactAge/.22);ctx.translate(Math.sin(impactAge*140)*amount,Math.cos(impactAge*170)*amount*.65);}
+ if(state==='flight'&&outcome?.distance&&!reducedMotion&&impactAge>=0&&impactAge<.22){const amount=(isBigHit(outcome.distance)?10:6)*(1-impactAge/.22);ctx.translate(Math.sin(impactAge*140)*amount,Math.cos(impactAge*170)*amount*.65);}
  const sky=ctx.createLinearGradient(0,0,0,300);sky.addColorStop(0,'#c6e5e2');sky.addColorStop(1,'#e4edd3');ctx.fillStyle=sky;ctx.fillRect(0,0,900,300);
  ellipse(720,85,35,35,'#fff3b7');
  for(let i=0;i<15;i++){ctx.fillStyle=i%2?'#91b6a1':'#a9c5aa';ctx.fillRect(i*66,161-(i%3)*12,64,55);ellipse(i*66+32,161-(i%3)*12,32,25,ctx.fillStyle);}
@@ -147,9 +157,9 @@ function frame(ms){now=ms/1000;const rect=canvas.getBoundingClientRect(),dpr=dev
   if(elapsed>pitchDuration){outcome={distance:0};state='result';$('label').textContent='공이 지나갔어요';$('result').textContent='다음 공을 노려보세요';$('buttonText').textContent='다시 도전';}
  }else if(state==='flight'){
   const t=now-flightAt;if(t<0||(!outcome.distance&&now-start<pitchDuration)){drawPitch();}else if(outcome.distance){let p=Math.min(Math.max(0,t-.07)/1.6,1);const point=q=>({x:450+lane+(outcome.timing-.5)*170*q,y:contactPoint.y-210*q-120*Math.sin(Math.PI*q)});
-   ctx.beginPath();for(let i=0;i<18;i++){const q=Math.max(0,p-i*.009),v=point(q);i?ctx.lineTo(v.x,v.y):ctx.moveTo(v.x,v.y);}ctx.strokeStyle='#fff9c8';ctx.lineWidth=4*(1-p*.7);ctx.stroke();const v=point(p);ball(v.x,v.y,6-p*3);
+   ctx.beginPath();for(let i=0;i<18;i++){const q=Math.max(0,p-i*.009),v=point(q);i?ctx.lineTo(v.x,v.y):ctx.moveTo(v.x,v.y);}ctx.strokeStyle=isBigHit(outcome.distance)?'#ffda67':'#fff9c8';ctx.lineWidth=(isBigHit(outcome.distance)?8:4)*(1-p*.7);ctx.stroke();const v=point(p);ball(v.x,v.y,6-p*3);
    ctx.save();ctx.fillStyle='#315943';ctx.font='900 20px sans-serif';ctx.textAlign='center';ctx.fillText(`${Math.round(outcome.distance*Math.min(1,p*1.5))} m`,v.x+37,v.y-12);ctx.restore();}
-  if(t>1.7){state='result';if(outcome.distance>best){best=outcome.distance;try{localStorage.setItem('onlyai-best',String(best));}catch{}$('best').innerHTML=`${best} <small>m</small>`;}$('result').textContent=outcome.distance?`${outcome.distance} m · ${outcome.grade}`:'헛스윙!';$('buttonText').textContent='다시 도전';}
+  if(t>1.7){state='result';if(outcome.distance>best){best=outcome.distance;try{localStorage.setItem('onlyai-best',String(best));}catch{}$('best').innerHTML=`${best} <small>m</small>`;}$('result').textContent=outcome.distance?`${outcome.distance} m · ${isBigHit(outcome.distance)?'장타! ':''}${outcome.grade}`:'헛스윙!';$('buttonText').textContent='다시 도전';}
  }else if(state==='idle'){ball(473,211,4);}
  if(state==='pitch'){
   const p=Math.min(elapsed/contactTime,1);ctx.fillStyle='#ffffff90';ctx.beginPath();ctx.roundRect(560,342,130,24,12);ctx.fill();ctx.fillStyle='#92b877';ctx.fillRect(671,348,20,12);ellipse(568+p*113,354,4,7,'#315c4a');ctx.fillStyle='#68805c';ctx.font='10px sans-serif';ctx.fillText('TIMING',584,334);
