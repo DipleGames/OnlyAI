@@ -1,0 +1,9 @@
+{
+  "appId": "com.diplegames.onlyai",
+  "appName": "오늘의 한 방",
+  "webDir": "www",
+  "android": {
+    "backgroundColor": "#f5f6ef",
+    "allowMixedContent": false
+  }
+}

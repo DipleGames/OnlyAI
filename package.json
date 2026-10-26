@@ -4,7 +4,20 @@
   "private": true,
   "scripts": {
     "dev": "python3 -m http.server 3000 --bind 0.0.0.0",
-    "test": "node --test"
+    "test": "node --test",
+    "build": "node scripts/build-web.mjs",
+    "android:sync": "npm run build && cap sync android",
+    "android:open": "cap open android"
   },
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "@capacitor/android": "8.5.3",
+    "@capacitor/core": "8.5.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.3"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
 }

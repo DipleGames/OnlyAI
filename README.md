@@ -29,3 +29,9 @@ Three.js 0.180.0은 MIT 라이선스로 `vendor/three`에 포함했습니다. CD
 오른쪽 위의 소리 ON/OFF 버튼으로 효과음을 조절하며 설정은 브라우저에 저장됩니다. 최고 기록, 타이밍 표시, 타구를 따라가는 항공뷰는 유지합니다.
 
 소리 버튼 옆의 **게이지 ON/OFF** 버튼으로 오른쪽 타이밍 게이지를 켜거나 끌 수 있습니다. 설정은 새로고침 후에도 유지되며, ON일 때에도 실제 투구 중에만 게이지가 표시됩니다.
+
+## Android APK
+
+Android Studio에서 열 수 있는 프로젝트를 `android` 폴더에 포함했습니다. Node.js 22 이상에서 `npm ci`, `npm run android:sync`를 실행한 뒤 Android Studio의 **Open**으로 `android` 폴더를 선택하세요. Windows 설치·기기 테스트·APK 생성 절차는 [Android 빌드 안내](docs/ANDROID.md)에 있습니다.
+
+웹 파일 묶음만 만들려면 `npm run build`를 사용합니다. `www`와 앱 내부 웹 파일은 생성물이므로 Git에 저장하지 않습니다. 기존 Live Server 실행 방법도 그대로 사용할 수 있습니다.
