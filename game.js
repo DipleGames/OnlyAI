@@ -5,7 +5,8 @@ import {isTrackedHit,sampleFlight,shotEndTime} from './flight.js';
 import {nextPitchPhase} from './pitch-cycle.js';
 const $=id=>document.getElementById(id);
 const canvas=$('field'),reducedMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
-let best=0,muted=false;
+let best=0,muted=false,timingEnabled=true;
+try{timingEnabled=localStorage.getItem('onlyai-timing-enabled')!=='false';}catch{}
 try{muted=localStorage.getItem('onlyai-muted')==='true';}catch{}
 try{best=Number(localStorage.getItem('onlyai-best'))||0;}catch{}
 $('best').innerHTML=`${best} <small>m</small>`;
@@ -66,6 +67,18 @@ function updateMute(){
 }
 updateMute();
 $('mute').addEventListener('click',()=>{muted=!muted;try{localStorage.setItem('onlyai-muted',String(muted));}catch{}updateMute();});
+function updateTimingToggle(){
+ $('timingToggle').textContent=timingEnabled?'게이지 ON':'게이지 OFF';
+ $('timingToggle').setAttribute('aria-pressed',String(timingEnabled));
+ $('timingToggle').setAttribute('aria-label',timingEnabled?'타이밍 게이지 끄기':'타이밍 게이지 켜기');
+ $('timing').hidden=!timingEnabled||state!=='pitch';
+}
+updateTimingToggle();
+$('timingToggle').addEventListener('click',()=>{
+ timingEnabled=!timingEnabled;
+ try{localStorage.setItem('onlyai-timing-enabled',String(timingEnabled));}catch{}
+ updateTimingToggle();
+});
 $('game').addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;action();});
 $('swing').addEventListener('click',action);
 window.addEventListener('keydown',e=>{if(e.code==='Space'&&!e.repeat&&!e.target.closest('button')){e.preventDefault();action();}});
@@ -99,7 +112,7 @@ function frame(ms){
   if(state==='flight'&&shot.landed)$('buttonText').textContent='착지 확인 중';
  }else $('game').dataset.camera=state==='returning'?'returning':'catcher';
  $('game').dataset.phase=state;
- const pitching=state==='pitch';$('timing').hidden=!pitching;
+ const pitching=state==='pitch';$('timing').hidden=!pitching||!timingEnabled;
  if(pitching)$('needle').style.left=`${Math.min(1,(now-start)/contactTime)*100}%`;
  field.render({now,state,start,phaseStarted,swungAt,flightAt,outcome,lane,contactTime,reducedMotion});
  requestAnimationFrame(frame);
