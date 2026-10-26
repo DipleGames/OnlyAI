@@ -4,6 +4,16 @@ const V=(x=0,y=0,z=0)=>new THREE.Vector3(x,y,z);
 const ease=t=>{t=THREE.MathUtils.clamp(t,0,1);return t*t*(3-2*t);};
 const mix=(a,b,t)=>a.clone().lerp(b,t);
 const contact=V(0,1.45,0);
+const moundZ=-20;
+export function configureCatcherCamera(camera,width,height){
+ // Centerline view from behind home plate. Keep the zone clear of the batter at left.
+ camera.aspect=width/height;
+ camera.fov=width<600?62:46;
+ camera.position.set(0,2.8,7);
+ camera.lookAt(0,1.5,moundZ);
+ camera.updateProjectionMatrix();
+ camera.updateMatrixWorld();
+}
 // The hand and barrel positions move through the hitting plane, then toward the pitcher (-Z).
 export function batPose(age){
  const ready={grip:V(-1.48,1.63,.92),tip:V(-1.9,2.95,1.45),turn:-.22};
@@ -21,11 +31,11 @@ export function createField(canvas){
  const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false});
  renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
  renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.25;
- const scene=new THREE.Scene();scene.background=new THREE.Color('#c7e4df');scene.fog=new THREE.Fog('#c7e4df',34,78);
- const camera=new THREE.PerspectiveCamera(40,1,.1,110);
+ const scene=new THREE.Scene();scene.background=new THREE.Color('#c7e4df');scene.fog=new THREE.Fog('#c7e4df',75,150);
+ const camera=new THREE.PerspectiveCamera(46,1,.1,210);
  scene.add(new THREE.HemisphereLight(0xfff6de,0x648c80,2.7));
  const sun=new THREE.DirectionalLight(0xffefd0,3.2);sun.position.set(-8,17,7);sun.castShadow=true;
- sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-22,right:22,top:22,bottom:-22,near:1,far:60});sun.shadow.normalBias=.035;sun.shadow.bias=-.0001;scene.add(sun);
+ sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-32,right:32,top:32,bottom:-32,near:1,far:90});sun.shadow.normalBias=.035;sun.shadow.bias=-.0001;scene.add(sun);
  const materials=new Map();
  function mat(color,extra={}){const key=color+JSON.stringify(extra);if(!materials.has(key))materials.set(key,new THREE.MeshStandardMaterial({color,roughness:.8,flatShading:true,...extra}));return materials.get(key);}
  function mesh(geometry,color,parent=scene,extra={}){const m=new THREE.Mesh(geometry,mat(color,extra));m.castShadow=true;m.receiveShadow=true;parent.add(m);return m;}
@@ -38,14 +48,14 @@ export function createField(canvas){
  function stripe(a,b,width,color,y=.03){const m=box(0,0,0,width,.025,1,color);joinGround(m,a,b,y);return m;}
  function joinGround(m,a,b,y){m.position.set((a.x+b.x)/2,y,(a.z+b.z)/2);m.scale.z=a.distanceTo(b);m.rotation.y=Math.atan2(b.x-a.x,b.z-a.z);}
  // Striped turf and diamond are real horizontal meshes receiving player shadows.
- const grass=mesh(new THREE.PlaneGeometry(110,110),'#93b479');grass.rotation.x=-Math.PI/2;grass.position.y=-.06;grass.castShadow=false;
- for(let i=0;i<14;i++)box(0,-.04,-37+i*4,64,.02,4,i%2?'#99b982':'#a3bf88');
- const diamond=mesh(new THREE.PlaneGeometry(17,17),'#e6c49a');diamond.rotation.x=-Math.PI/2;diamond.rotation.z=Math.PI/4;diamond.position.set(0,.005,-10);
- const inner=mesh(new THREE.PlaneGeometry(12.1,12.1),'#9fb982');inner.rotation.x=-Math.PI/2;inner.rotation.z=Math.PI/4;inner.position.set(0,.012,-10);
- cylinder(0,.015,-13,1.4,1.4,.1,'#e8c99f',scene,24);box(0,.08,-13,.7,.025,.15,'#fff8df');
+ const grass=mesh(new THREE.PlaneGeometry(200,200),'#93b479');grass.rotation.x=-Math.PI/2;grass.position.set(0,-.06,-35);grass.castShadow=false;
+ for(let i=0;i<26;i++)box(0,-.04,-91+i*4,170,.02,4,i%2?'#99b982':'#a3bf88');
+ const diamond=mesh(new THREE.PlaneGeometry(28.9,28.9),'#e6c49a');diamond.rotation.x=-Math.PI/2;diamond.rotation.z=Math.PI/4;diamond.position.set(0,.005,-18);
+ const inner=mesh(new THREE.PlaneGeometry(20.1,20.1),'#9fb982');inner.rotation.x=-Math.PI/2;inner.rotation.z=Math.PI/4;inner.position.set(0,.012,-18);
+ cylinder(0,.015,moundZ,1.55,1.55,.1,'#e8c99f',scene,24);box(0,.08,moundZ,.7,.025,.15,'#fff8df');
  cylinder(0,.017,0,2.75,2.75,.06,'#e5c299',scene,32);
- stripe(V(0,0,1),V(-23,0,-22),.065,'#fff9df');stripe(V(0,0,1),V(23,0,-22),.065,'#fff9df');
- for(const x of [-10,10]){const base=box(x,.08,-10,.65,.1,.65,'#fff9df');base.rotation.y=Math.PI/4;}box(0,.08,-20,.65,.1,.65,'#fff9df');
+ stripe(V(0,0,0),V(-60,0,-60),.09,'#fff9df');stripe(V(0,0,0),V(60,0,-60),.09,'#fff9df');
+ for(const x of [-18,18]){const base=box(x,.08,-18,.65,.1,.65,'#fff9df');base.rotation.y=Math.PI/4;}box(0,.08,-36,.65,.1,.65,'#fff9df');
  const plateShape=new THREE.Shape();plateShape.moveTo(-.42,-.3);plateShape.lineTo(.42,-.3);plateShape.lineTo(.42,.13);plateShape.lineTo(0,.48);plateShape.lineTo(-.42,.13);plateShape.closePath();
  const plate=mesh(new THREE.ShapeGeometry(plateShape),'#fff8e6');plate.rotation.x=-Math.PI/2;plate.position.set(0,.065,.35);
  // Batter's box stays on the ground; the strike zone stands above the plate.
@@ -55,9 +65,19 @@ export function createField(canvas){
  const points=[];for(let i=0;i<4;i++){const x=-.62+i*1.24/3,y=.85+i*1.18/3;points.push(V(x,.85,0),V(x,2.03,0),V(-.62,y,0),V(.62,y,0));}
  const grid=new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(points),zoneMaterial);zone.add(grid);
  // Outfield wall, faceted trees and empty bleachers. Only two people on the field.
- for(let i=0;i<19;i++){const x=-28+i*3.1;box(x,1.05,-32,3,2.1,.7,i%2?'#3d7567':'#447d6a');box(x,2.15,-32,3.1,.12,.85,'#e8c87d');}
- for(let i=0;i<23;i++){const x=-35+i*3.2,z=-37-(i%3)*2;const height=2+(i%4)*.65;cylinder(x,height/2,z,.14,.23,height,'#8b7959');const crown=sphere(x,height+1,z,1.8+(i%3)*.3,i%2?'#72a489':'#87b096');crown.scale.y=1.3;}
- for(const side of [-1,1])for(let row=0;row<4;row++){box(side*(23+row*.7),.5+row*.6,-16,3,.35,15,row%2?'#c9d9c6':'#e1dfc2');}
+ for(let i=0;i<41;i++){
+  const angle=-Math.PI/3+i*Math.PI/60,x=Math.sin(angle)*70,z=-Math.cos(angle)*70;
+  const wall=box(x,1.8,z,3.85,3.6,.8,i%2?'#3d7567':'#447d6a');wall.rotation.y=-angle;
+  const rail=box(x,3.67,z,3.87,.14,.95,'#e8c87d');rail.rotation.y=-angle;
+ }
+ for(const side of [-1,1]){
+  cylinder(side*49.5,5.5,-49.5,.1,.1,11,'#edc961');
+  for(let row=0;row<5;row++)box(side*(37+row*.9),.6+row*.7,-29,2.3,.4,28,row%2?'#c9d9c6':'#e1dfc2');
+ }
+ for(let i=0;i<35;i++){
+  const angle=-Math.PI/3+i*Math.PI/51,radius=77+(i%3)*2,x=Math.sin(angle)*radius,z=-Math.cos(angle)*radius,height=3+(i%4)*.8;
+  cylinder(x,height/2,z,.2,.3,height,'#8b7959');const crown=sphere(x,height+1,z,2.3+(i%3)*.3,i%2?'#72a489':'#87b096');crown.scale.y=1.3;
+ }
  // Faceted mascot-like characters, built from articulated low-poly meshes.
  function avatar(x,z,jersey,helmet=false){
   const root=new THREE.Group();root.position.set(x,0,z);scene.add(root);
@@ -90,7 +110,7 @@ export function createField(canvas){
   }
   return {root,body,limbPose};
  }
- const batter=avatar(-1.55,.7,'#fff4da',true),pitcher=avatar(0,-13,'#dc8059');pitcher.root.rotation.y=Math.PI;
+ const batter=avatar(-1.55,.7,'#fff4da',true),pitcher=avatar(0,moundZ,'#dc8059');pitcher.root.rotation.y=Math.PI;
  const batHandle=bone(.055,'#5d4830'),batBarrel=mesh(new THREE.CylinderGeometry(.11,.065,1,9),'#dfac60');
  const baseball=sphere(0,0,0,.13,'#fff9e5');const seam=mesh(new THREE.TorusGeometry(.127,.009,4,14),'#cb654a',baseball);seam.rotation.x=.5;
  const ballShadow=mesh(new THREE.CircleGeometry(.18,12),'#355744',scene,{transparent:true,opacity:.17,depthWrite:false});ballShadow.rotation.x=-Math.PI/2;ballShadow.position.y=.07;ballShadow.castShadow=false;
@@ -101,9 +121,8 @@ export function createField(canvas){
  let lastWidth=0,lastHeight=0;
  function render({now,state,start,swungAt,flightAt,outcome,lane,contactTime,reducedMotion}){
   const w=canvas.clientWidth,h=canvas.clientHeight;
-  if(w!==lastWidth||h!==lastHeight){lastWidth=w;lastHeight=h;renderer.setSize(w,h,false);camera.aspect=w/h;camera.fov=w<600?49:40;camera.updateProjectionMatrix();}
-  const mobile=w<600;
-  camera.position.set(mobile?4.8:4.3,mobile?7:5.8,mobile?12:9.5);camera.lookAt(0,1,-3.5);
+  if(w!==lastWidth||h!==lastHeight){lastWidth=w;lastHeight=h;renderer.setSize(w,h,false);configureCatcherCamera(camera,w,h);}
+  camera.position.set(0,2.8,7);camera.lookAt(0,1.5,moundZ);
   const t=now-flightAt,big=isBigHit(outcome?.distance??0),age=now-swungAt,pose=batPose(age);
   if(state==='flight'&&outcome?.distance&&t>=0&&t<.22&&!reducedMotion){const amount=(big?.12:.065)*(1-t/.22);camera.position.x+=Math.sin(t*140)*amount;camera.position.y+=Math.cos(t*170)*amount;}
   batter.limbPose(pose.turn,pose.grip);
@@ -115,14 +134,14 @@ export function createField(canvas){
    const elapsed=now-start,release=.38;
    if(elapsed<release)return pitcher.root.localToWorld(V(.45,1.6+wind*.65,-.05+wind*.6));
    const p=Math.min((elapsed-release)/(contactTime+swingContactDelay-release),1.3);
-   return V(-.45+(lane/65+.45)*p,1.6+(1.45-1.6)*p+Math.sin(p*Math.PI)*.35,-12.95+12.95*p);
+   return V(-.45+(lane/65+.45)*p,1.6+(1.45-1.6)*p+Math.sin(p*Math.PI)*.35,moundZ+.05-(moundZ+.05)*p);
   };
-  const flight=q=>V(lane/65+q*(outcome.timing-.5)*9,contact.y+Math.sin(Math.PI*q)*(big?10:7)-q*1.3,-q*(12+(outcome?.distance||0)*.15));
+  const flight=q=>V(lane/65+q*(outcome.timing-.5)*9,contact.y+Math.sin(Math.PI*q)*(big?10:7)-q*1.3,-q*Math.max(2,(outcome?.distance||0)*.5));
   let position=null;
   if(state==='pitch'||(state==='flight'&&(t<0||(!outcome?.distance&&now-start<1.65))))position=pitch();
   else if(state==='flight'&&outcome?.distance){const p=THREE.MathUtils.clamp((t-.05)/1.6,0,1);position=flight(p);
    const vertices=[];for(let i=0;i<22;i++)vertices.push(flight(Math.max(0,p-i*.008)));trail.geometry.dispose();trail.geometry=new THREE.BufferGeometry().setFromPoints(vertices);trailMaterial.color.set(big?'#ffd45b':'#fff5ca');}
-  else if(state==='idle')position=V(.42,2.15,-13);
+  else if(state==='idle')position=V(.42,2.15,moundZ);
   baseball.visible=ballShadow.visible=!!position;trail.visible=state==='flight'&&outcome?.distance>0&&t>=0;
   if(position){baseball.position.copy(position);baseball.rotation.z=now*12;ballShadow.position.set(position.x,.09,position.z);ballShadow.scale.setScalar(Math.max(.4,1-position.y/15));}
   const effect=state==='flight'&&outcome?.distance&&t>=0&&t<(big?1.3:.5);

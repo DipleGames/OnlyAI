@@ -9,3 +9,7 @@ button{bottom:20px}.hint{bottom:3px}
 @media(prefers-reduced-motion:reduce){.big-hit .announcement strong{transform:none}}
 
 .announcement span{display:inline-block;padding:4px 10px;border-radius:20px;background:#f8f9e7d9;color:#4e715b}.announcement strong{margin-top:3px}
+
+/* Give the catcher view enough height for the batter, zone and deep outfield. */
+.game{height:560px}.announcement{top:66px}.announcement strong{font-size:22px}
+@media(max-width:600px){.game{height:520px}.announcement{top:64px}.announcement strong{font-size:19px}}
