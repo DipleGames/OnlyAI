@@ -5,17 +5,14 @@ import {isTrackedHit,sampleFlight,shotEndTime} from './flight.js';
 import {nextPitchPhase} from './pitch-cycle.js';
 const $=id=>document.getElementById(id);
 const canvas=$('field'),reducedMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
-let best=0,muted=false;
+let muted=false;
 try{muted=localStorage.getItem('onlyai-muted')==='true';}catch{}
-try{best=Number(localStorage.getItem('onlyai-best'))||0;}catch{}
-$('best').innerHTML=`${best} <small>m</small>`;
-let state='idle',start=0,swungAt=-99,flightAt=0,shots=0,lane=0,outcome=null,audio,impactPlayed=false,phaseStarted=0;
+let state='idle',start=0,swungAt=-99,flightAt=0,lane=0,outcome=null,audio,impactPlayed=false,phaseStarted=0;
 const contactTime=1.27,pitchDuration=1.65;
 let field;
 try{field=createField(canvas);}catch(error){
  console.error('3D renderer initialization failed:',error);
- $('label').textContent='3D 화면을 시작하지 못했어요';
- $('result').textContent='브라우저의 하드웨어 가속을 확인해 주세요';
+ $('status').textContent='3D 화면을 시작하지 못했어요. 브라우저의 하드웨어 가속을 확인해 주세요.';
  $('buttonText').textContent='3D 실행 불가';$('swing').disabled=true;
 }
 function sound(hit=false,big=false){
@@ -40,9 +37,9 @@ function sound(hit=false,big=false){
  if(state==='idle'||state==='result'){
   state=isTrackedHit(outcome)?'returning':'ready';phaseStarted=now;
   swungAt=-99;lane=(Math.random()-.5)*64;outcome=null;impactPlayed=false;
-  $('game').classList.remove('big-hit');$('recordNotice').hidden=true;showPitchPhase();
+  showPitchPhase();
  }else if(state==='pitch'){
-  swungAt=now;shots++;$('count').textContent=`SWING ${String(shots).padStart(2,'0')}`;
+  swungAt=now;
   outcome=hitResult(now-start-contactTime,lane);state='flight';flightAt=now+swingContactDelay;
   $('buttonText').textContent='스윙!';
  }
@@ -50,16 +47,14 @@ function sound(hit=false,big=false){
 function showPitchPhase(){
  const returning=state==='returning',ready=state==='ready';
  $('swing').disabled=returning||ready;
- $('label').textContent=returning?'타석으로 복귀 중':ready?'잠시 후 투수가 공을 던집니다':'공이 스트라이크존에 도착할 때';
- $('result').textContent=returning?'포수 시점으로 돌아갑니다':ready?'준비하세요!':'타이밍을 맞춰 터치!';
+ $('status').textContent=returning?'포수 시점으로 돌아갑니다':ready?'준비하세요!':'공이 스트라이크존에 도착할 때 터치하세요';
  $('buttonText').textContent=returning?'화면 복귀 중…':ready?'투구 준비 중…':'배트 휘두르기';
 }
 function finish(){
- state='result';$('game').classList.remove('big-hit');
- if(outcome.distance>best){$('recordNotice').hidden=false;best=outcome.distance;try{localStorage.setItem('onlyai-best',String(best));}catch{}$('best').innerHTML=`${best} <small>m</small>`;}
- $('result').textContent=outcome.distance?`${outcome.distance} m · ${isBigHit(outcome.distance)?'장타! ':''}${outcome.grade}`:'헛스윙!';
+ state='result';
+ $('lastDistance').textContent=String(outcome.distance);
+ $('status').textContent=`최근 비거리 ${outcome.distance}m`;
  $('buttonText').textContent='다시 도전';
-
 }
 function updateMute(){
  $('mute').textContent=muted?'소리 OFF':'소리 ON';$('mute').setAttribute('aria-pressed',String(muted));$('mute').setAttribute('aria-label',muted?'효과음 켜기':'효과음 끄기');
@@ -79,22 +74,18 @@ function frame(ms){
   if(state==='pitch')start=now;
   showPitchPhase();
  }
- if(state==='pitch'&&now-start>pitchDuration){state='result';outcome={distance:0};$('label').textContent='공이 지나갔어요';$('result').textContent='다음 공을 노려보세요';$('buttonText').textContent='다시 도전';}
+ if(state==='pitch'&&now-start>pitchDuration){outcome={distance:0};finish();}
  if(state==='flight'){
   const t=now-flightAt;
   if(t>=0&&!impactPlayed){impactPlayed=true;const big=isBigHit(outcome.distance);sound(outcome.distance>0,big);
    if(outcome.distance&&navigator.vibrate)navigator.vibrate(big?[30,20,60]:20);
-   $('label').textContent=outcome.distance?`타이밍 ${Math.round(outcome.timing*100)}% · 중심 ${Math.round(outcome.contact*100)}%`:'타이밍을 조금 바꿔 보세요';
-   $('result').textContent=big?'BIG HIT! · 장타!':outcome.grade;$('buttonText').textContent='공이 날아가는 중';$('game').classList.toggle('big-hit',big);
+   $('buttonText').textContent=outcome.distance?'공이 날아가는 중':'헛스윙';
   }
   if(t>shotEndTime(outcome))finish();
  }
  const track=isTrackedHit(outcome)&&(state==='flight'||state==='result')&&now>=flightAt;
- $('shotTracker').hidden=!track;
  if(track){
   const shot=sampleFlight(outcome,lane,now-flightAt);
-  $('shotState').textContent=shot.landed?'LANDED · 착지 완료':'FLY CAM · 타구 추적';
-  $('shotDistance').textContent=`${Math.round(outcome.distance*shot.progress)} m`;
   $('game').dataset.camera=shot.landed?'landing':'tracking';
   if(state==='flight'&&shot.landed)$('buttonText').textContent='착지 확인 중';
  }else $('game').dataset.camera=state==='returning'?'returning':'catcher';
