@@ -1,6 +1,7 @@
 import {hitResult} from './physics.js';
 import {swingContactDelay,isBigHit} from './batting.js';
 import {createField} from './scene.js';
+import {isTrackedHit,sampleFlight,shotEndTime} from './flight.js';
 const $=id=>document.getElementById(id);
 const canvas=$('field'),reducedMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
 let best=0;
@@ -63,8 +64,17 @@ function frame(ms){
    $('label').textContent=outcome.distance?`타이밍 ${Math.round(outcome.timing*100)}% · 중심 ${Math.round(outcome.contact*100)}%`:'타이밍을 조금 바꿔 보세요';
    $('result').textContent=big?'BIG HIT! · 장타!':outcome.grade;$('buttonText').textContent='공이 날아가는 중';$('game').classList.toggle('big-hit',big);
   }
-  if(t>1.8)finish();
+  if(t>shotEndTime(outcome))finish();
  }
+ const track=isTrackedHit(outcome)&&(state==='flight'||state==='result')&&now>=flightAt;
+ $('shotTracker').hidden=!track;
+ if(track){
+  const shot=sampleFlight(outcome,lane,now-flightAt);
+  $('shotState').textContent=shot.landed?'LANDED · 착지 완료':'FLY CAM · 타구 추적';
+  $('shotDistance').textContent=`${Math.round(outcome.distance*shot.progress)} m`;
+  $('game').dataset.camera=shot.landed?'landing':'tracking';
+  if(state==='flight'&&shot.landed)$('buttonText').textContent='착지 확인 중';
+ }else $('game').dataset.camera='catcher';
  const pitching=state==='pitch';$('timing').hidden=!pitching;
  if(pitching)$('needle').style.left=`${Math.min(1,(now-start)/contactTime)*100}%`;
  field.render({now,state,start,swungAt,flightAt,outcome,lane,contactTime,reducedMotion});

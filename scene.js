@@ -1,5 +1,6 @@
 import * as THREE from './vendor/three/three.module.min.js';
 import { swingContactDelay, isBigHit } from './batting.js';
+import {isTrackedHit,sampleFlight,shotCameraPose,landingTime} from './flight.js';
 const V=(x=0,y=0,z=0)=>new THREE.Vector3(x,y,z);
 const ease=t=>{t=THREE.MathUtils.clamp(t,0,1);return t*t*(3-2*t);};
 const mix=(a,b,t)=>a.clone().lerp(b,t);
@@ -75,7 +76,7 @@ export function createField(canvas){
   for(let row=0;row<5;row++)box(side*(37+row*.9),.6+row*.7,-29,2.3,.4,28,row%2?'#c9d9c6':'#e1dfc2');
  }
  for(let i=0;i<35;i++){
-  const angle=-Math.PI/3+i*Math.PI/51,radius=77+(i%3)*2,x=Math.sin(angle)*radius,z=-Math.cos(angle)*radius,height=3+(i%4)*.8;
+  const angle=-Math.PI/3+i*Math.PI/51,radius=91+(i%3)*2,x=Math.sin(angle)*radius,z=-Math.cos(angle)*radius,height=3+(i%4)*.8;
   cylinder(x,height/2,z,.2,.3,height,'#8b7959');const crown=sphere(x,height+1,z,2.3+(i%3)*.3,i%2?'#72a489':'#87b096');crown.scale.y=1.3;
  }
  // Faceted mascot-like characters, built from articulated low-poly meshes.
@@ -118,12 +119,29 @@ export function createField(canvas){
  const trail=new THREE.Line(new THREE.BufferGeometry(),trailMaterial);scene.add(trail);
  const rings=Array.from({length:3},()=>{const r=mesh(new THREE.TorusGeometry(1,.022,5,40),'#ffe082',scene,{transparent:true,opacity:1,emissive:'#d58b27',emissiveIntensity:.5});r.castShadow=false;return r;});
  const sparks=Array.from({length:48},(_,i)=>{const m=box(0,0,0,.065,.12,.045,['#ffcd61','#fff1bd','#e98757','#85c2a1'][i%4]);m.castShadow=false;return m;});
- let lastWidth=0,lastHeight=0;
+ const ballHalo=new THREE.Mesh(new THREE.RingGeometry(.17,.21,24),new THREE.MeshBasicMaterial({color:'#ffd466',transparent:true,opacity:.9,side:THREE.DoubleSide,depthWrite:false}));scene.add(ballHalo);
+ const landingRing=mesh(new THREE.RingGeometry(.85,1,48),'#ffe29c',scene,{transparent:true,opacity:.9,side:THREE.DoubleSide,depthWrite:false});
+ landingRing.rotation.x=-Math.PI/2;landingRing.castShadow=false;
+ const landingDot=mesh(new THREE.CircleGeometry(.18,16),'#fff6cd');landingDot.rotation.x=-Math.PI/2;landingDot.castShadow=false;
+ let lastWidth=0,lastHeight=0,lastTrackedPose=null;
+
  function render({now,state,start,swungAt,flightAt,outcome,lane,contactTime,reducedMotion}){
   const w=canvas.clientWidth,h=canvas.clientHeight;
   if(w!==lastWidth||h!==lastHeight){lastWidth=w;lastHeight=h;renderer.setSize(w,h,false);configureCatcherCamera(camera,w,h);}
-  camera.position.set(0,2.8,7);camera.lookAt(0,1.5,moundZ);
+  camera.position.set(0,2.8,7);camera.lookAt(0,1.5,moundZ);camera.fov=w<600?62:46;
   const t=now-flightAt,big=isBigHit(outcome?.distance??0),age=now-swungAt,pose=batPose(age);
+  const tracked=isTrackedHit(outcome)&&(state==='flight'||state==='result')&&t>=0;
+  if(tracked){
+   const shot=shotCameraPose(outcome,lane,t,w,reducedMotion);
+   camera.position.copy(shot.position);camera.lookAt(shot.target);camera.fov=shot.fov;lastTrackedPose=shot;
+  }else if(lastTrackedPose){
+   const blend=state==='pitch'&&!reducedMotion?ease((now-start)/.32):1;
+   camera.position.copy(mix(lastTrackedPose.position,V(0,2.8,7),blend));
+   camera.lookAt(mix(lastTrackedPose.target,V(0,1.5,moundZ),blend));
+   camera.fov=THREE.MathUtils.lerp(lastTrackedPose.fov,w<600?62:46,blend);
+   if(blend>=1)lastTrackedPose=null;
+  }
+  camera.updateProjectionMatrix();
   if(state==='flight'&&outcome?.distance&&t>=0&&t<.22&&!reducedMotion){const amount=(big?.12:.065)*(1-t/.22);camera.position.x+=Math.sin(t*140)*amount;camera.position.y+=Math.cos(t*170)*amount;}
   batter.limbPose(pose.turn,pose.grip);
   const wind=state==='pitch'?Math.sin(Math.min(1,(now-start)/.38)*Math.PI):0;
@@ -136,14 +154,23 @@ export function createField(canvas){
    const p=Math.min((elapsed-release)/(contactTime+swingContactDelay-release),1.3);
    return V(-.45+(lane/65+.45)*p,1.6+(1.45-1.6)*p+Math.sin(p*Math.PI)*.35,moundZ+.05-(moundZ+.05)*p);
   };
-  const flight=q=>V(lane/65+q*(outcome.timing-.5)*9,contact.y+Math.sin(Math.PI*q)*(big?10:7)-q*1.3,-q*Math.max(2,(outcome?.distance||0)*.5));
-  let position=null;
+  let position=null,shot=null;
   if(state==='pitch'||(state==='flight'&&(t<0||(!outcome?.distance&&now-start<1.65))))position=pitch();
-  else if(state==='flight'&&outcome?.distance){const p=THREE.MathUtils.clamp((t-.05)/1.6,0,1);position=flight(p);
-   const vertices=[];for(let i=0;i<22;i++)vertices.push(flight(Math.max(0,p-i*.008)));trail.geometry.dispose();trail.geometry=new THREE.BufferGeometry().setFromPoints(vertices);trailMaterial.color.set(big?'#ffd45b':'#fff5ca');}
-  else if(state==='idle')position=V(.42,2.15,moundZ);
-  baseball.visible=ballShadow.visible=!!position;trail.visible=state==='flight'&&outcome?.distance>0&&t>=0;
-  if(position){baseball.position.copy(position);baseball.rotation.z=now*12;ballShadow.position.set(position.x,.09,position.z);ballShadow.scale.setScalar(Math.max(.4,1-position.y/15));}
+  else if((state==='flight'||state==='result')&&outcome?.distance&&t>=0){
+   shot=sampleFlight(outcome,lane,t);position=shot.position;
+   const vertices=[];for(let i=0;i<22;i++)vertices.push(sampleFlight(outcome,lane,Math.max(0,t-i*.025)).position);
+   trail.geometry.dispose();trail.geometry=new THREE.BufferGeometry().setFromPoints(vertices);trailMaterial.color.set(big?'#ffd45b':'#fff5ca');
+  }else if(state==='idle')position=V(.42,2.15,moundZ);
+  baseball.visible=ballShadow.visible=!!position;trail.visible=state==='flight'&&outcome?.distance>0&&t>=0&&!shot?.landed;
+  if(position){baseball.position.copy(position);baseball.rotation.z=now*12;ballShadow.position.set(position.x,.09,position.z);ballShadow.scale.setScalar(Math.max(.4,1-position.y/30));}
+  landingRing.visible=landingDot.visible=!!shot&&isTrackedHit(outcome);
+  if(landingRing.visible){
+   landingRing.position.set(shot.landing.x,.095,shot.landing.z);landingDot.position.set(shot.landing.x,.1,shot.landing.z);
+   const after=Math.max(0,t-landingTime(outcome));landingRing.scale.setScalar(shot.landed?1+Math.min(after,1)*1.4:1);
+   landingRing.material.opacity=shot.landed?Math.max(.4,1-after*.5):.55;
+  }
+  ballHalo.visible=tracked&&!!position&&!shot?.landed;
+  if(ballHalo.visible){ballHalo.position.copy(position);ballHalo.quaternion.copy(camera.quaternion);}
   const effect=state==='flight'&&outcome?.distance&&t>=0&&t<(big?1.3:.5);
   for(let i=0;i<rings.length;i++){const r=rings[i],age=t-i*.09;r.visible=!!effect&&age>=0&&(big||i===0);if(!r.visible)continue;
    r.position.set(lane/65,1.45,0);r.scale.setScalar(.15+age*(big?5:3));r.material=mat('#ffe082',{transparent:true,emissive:'#d58b27',emissiveIntensity:.5});r.material.opacity=Math.max(0,1-t/(big?1.3:.5));}
