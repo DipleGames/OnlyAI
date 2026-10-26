@@ -1,6 +1,7 @@
 import * as THREE from './vendor/three/three.module.min.js';
 import { swingContactDelay, isBigHit } from './batting.js';
 import {isTrackedHit,sampleFlight,shotCameraPose,landingTime} from './flight.js';
+import {cameraReturnDuration} from './pitch-cycle.js';
 const V=(x=0,y=0,z=0)=>new THREE.Vector3(x,y,z);
 const ease=t=>{t=THREE.MathUtils.clamp(t,0,1);return t*t*(3-2*t);};
 const mix=(a,b,t)=>a.clone().lerp(b,t);
@@ -125,7 +126,7 @@ export function createField(canvas){
  const landingDot=mesh(new THREE.CircleGeometry(.18,16),'#fff6cd');landingDot.rotation.x=-Math.PI/2;landingDot.castShadow=false;
  let lastWidth=0,lastHeight=0,lastTrackedPose=null;
 
- function render({now,state,start,swungAt,flightAt,outcome,lane,contactTime,reducedMotion}){
+ function render({now,state,start,phaseStarted,swungAt,flightAt,outcome,lane,contactTime,reducedMotion}){
   const w=canvas.clientWidth,h=canvas.clientHeight;
   if(w!==lastWidth||h!==lastHeight){lastWidth=w;lastHeight=h;renderer.setSize(w,h,false);configureCatcherCamera(camera,w,h);}
   camera.position.set(0,2.8,7);camera.lookAt(0,1.5,moundZ);camera.fov=w<600?62:46;
@@ -135,7 +136,7 @@ export function createField(canvas){
    const shot=shotCameraPose(outcome,lane,t,w,reducedMotion);
    camera.position.copy(shot.position);camera.lookAt(shot.target);camera.fov=shot.fov;lastTrackedPose=shot;
   }else if(lastTrackedPose){
-   const blend=state==='pitch'&&!reducedMotion?ease((now-start)/.32):1;
+   const blend=state==='returning'&&!reducedMotion?ease((now-phaseStarted)/cameraReturnDuration):1;
    camera.position.copy(mix(lastTrackedPose.position,V(0,2.8,7),blend));
    camera.lookAt(mix(lastTrackedPose.target,V(0,1.5,moundZ),blend));
    camera.fov=THREE.MathUtils.lerp(lastTrackedPose.fov,w<600?62:46,blend);
@@ -160,7 +161,7 @@ export function createField(canvas){
    shot=sampleFlight(outcome,lane,t);position=shot.position;
    const vertices=[];for(let i=0;i<22;i++)vertices.push(sampleFlight(outcome,lane,Math.max(0,t-i*.025)).position);
    trail.geometry.dispose();trail.geometry=new THREE.BufferGeometry().setFromPoints(vertices);trailMaterial.color.set(big?'#ffd45b':'#fff5ca');
-  }else if(state==='idle')position=V(.42,2.15,moundZ);
+  }else if(['idle','returning','ready'].includes(state))position=pitcher.root.localToWorld(V(.45,1.6,-.05));
   baseball.visible=ballShadow.visible=!!position;trail.visible=state==='flight'&&outcome?.distance>0&&t>=0&&!shot?.landed;
   if(position){baseball.position.copy(position);baseball.rotation.z=now*12;ballShadow.position.set(position.x,.09,position.z);ballShadow.scale.setScalar(Math.max(.4,1-position.y/30));}
   landingRing.visible=landingDot.visible=!!shot&&isTrackedHit(outcome);

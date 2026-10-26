@@ -2,12 +2,13 @@ import {hitResult} from './physics.js';
 import {swingContactDelay,isBigHit} from './batting.js';
 import {createField} from './scene.js';
 import {isTrackedHit,sampleFlight,shotEndTime} from './flight.js';
+import {nextPitchPhase} from './pitch-cycle.js';
 const $=id=>document.getElementById(id);
 const canvas=$('field'),reducedMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
 let best=0;
 try{best=Number(localStorage.getItem('onlyai-best'))||0;}catch{}
 $('best').innerHTML=`${best} <small>m</small>`;
-let state='idle',start=0,swungAt=-99,flightAt=0,shots=0,lane=0,outcome=null,audio,impactPlayed=false;
+let state='idle',start=0,swungAt=-99,flightAt=0,shots=0,lane=0,outcome=null,audio,impactPlayed=false,phaseStarted=0;
 const contactTime=1.27,pitchDuration=1.65;
 let field;
 try{field=createField(canvas);}catch(error){
@@ -35,14 +36,21 @@ function sound(hit=false,big=false){
  if(!audio){try{audio=new AudioContext();audio.resume();}catch{}}
  const now=performance.now()/1000;
  if(state==='idle'||state==='result'){
-  state='pitch';start=now;swungAt=-99;lane=(Math.random()-.5)*64;outcome=null;impactPlayed=false;
-  $('game').classList.remove('big-hit');$('label').textContent='공이 스트라이크존에 도착할 때';
-  $('result').textContent='타이밍을 맞춰 터치!';$('buttonText').textContent='배트 휘두르기';
+  state=isTrackedHit(outcome)?'returning':'ready';phaseStarted=now;
+  swungAt=-99;lane=(Math.random()-.5)*64;outcome=null;impactPlayed=false;
+  $('game').classList.remove('big-hit');showPitchPhase();
  }else if(state==='pitch'){
   swungAt=now;shots++;$('count').textContent=`SWING ${String(shots).padStart(2,'0')}`;
   outcome=hitResult(now-start-contactTime,lane);state='flight';flightAt=now+swingContactDelay;
   $('buttonText').textContent='스윙!';
  }
+}
+function showPitchPhase(){
+ const returning=state==='returning',ready=state==='ready';
+ $('swing').disabled=returning||ready;
+ $('label').textContent=returning?'타석으로 복귀 중':ready?'잠시 후 투수가 공을 던집니다':'공이 스트라이크존에 도착할 때';
+ $('result').textContent=returning?'포수 시점으로 돌아갑니다':ready?'준비하세요!':'타이밍을 맞춰 터치!';
+ $('buttonText').textContent=returning?'화면 복귀 중…':ready?'투구 준비 중…':'배트 휘두르기';
 }
 function finish(){
  state='result';$('game').classList.remove('big-hit');
@@ -56,6 +64,13 @@ window.addEventListener('keydown',e=>{if(e.code==='Space'&&!e.repeat&&!e.target.
 function frame(ms){
  if(!field)return;
  const now=ms/1000;
+ const next=nextPitchPhase(state,phaseStarted,now,reducedMotion);
+ if(next!==state){
+  state=next;phaseStarted=now;
+  // Start timing only once the view has returned and the preparation pause has finished.
+  if(state==='pitch')start=now;
+  showPitchPhase();
+ }
  if(state==='pitch'&&now-start>pitchDuration){state='result';outcome={distance:0};$('label').textContent='공이 지나갔어요';$('result').textContent='다음 공을 노려보세요';$('buttonText').textContent='다시 도전';}
  if(state==='flight'){
   const t=now-flightAt;
@@ -74,10 +89,11 @@ function frame(ms){
   $('shotDistance').textContent=`${Math.round(outcome.distance*shot.progress)} m`;
   $('game').dataset.camera=shot.landed?'landing':'tracking';
   if(state==='flight'&&shot.landed)$('buttonText').textContent='착지 확인 중';
- }else $('game').dataset.camera='catcher';
+ }else $('game').dataset.camera=state==='returning'?'returning':'catcher';
+ $('game').dataset.phase=state;
  const pitching=state==='pitch';$('timing').hidden=!pitching;
  if(pitching)$('needle').style.left=`${Math.min(1,(now-start)/contactTime)*100}%`;
- field.render({now,state,start,swungAt,flightAt,outcome,lane,contactTime,reducedMotion});
+ field.render({now,state,start,phaseStarted,swungAt,flightAt,outcome,lane,contactTime,reducedMotion});
  requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
