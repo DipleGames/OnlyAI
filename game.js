@@ -5,7 +5,8 @@ import {isTrackedHit,sampleFlight,shotEndTime} from './flight.js';
 import {nextPitchPhase} from './pitch-cycle.js';
 const $=id=>document.getElementById(id);
 const canvas=$('field'),reducedMotion=matchMedia('(prefers-reduced-motion: reduce)').matches;
-let best=0;
+let best=0,muted=false;
+try{muted=localStorage.getItem('onlyai-muted')==='true';}catch{}
 try{best=Number(localStorage.getItem('onlyai-best'))||0;}catch{}
 $('best').innerHTML=`${best} <small>m</small>`;
 let state='idle',start=0,swungAt=-99,flightAt=0,shots=0,lane=0,outcome=null,audio,impactPlayed=false,phaseStarted=0;
@@ -18,6 +19,7 @@ try{field=createField(canvas);}catch(error){
  $('buttonText').textContent='3D 실행 불가';$('swing').disabled=true;
 }
 function sound(hit=false,big=false){
+ if(muted)return;
  try{
   audio??=new AudioContext();audio.resume();
   const time=audio.currentTime;
@@ -38,7 +40,7 @@ function sound(hit=false,big=false){
  if(state==='idle'||state==='result'){
   state=isTrackedHit(outcome)?'returning':'ready';phaseStarted=now;
   swungAt=-99;lane=(Math.random()-.5)*64;outcome=null;impactPlayed=false;
-  $('game').classList.remove('big-hit');showPitchPhase();
+  $('game').classList.remove('big-hit');$('recordNotice').hidden=true;showPitchPhase();
  }else if(state==='pitch'){
   swungAt=now;shots++;$('count').textContent=`SWING ${String(shots).padStart(2,'0')}`;
   outcome=hitResult(now-start-contactTime,lane);state='flight';flightAt=now+swingContactDelay;
@@ -54,10 +56,19 @@ function showPitchPhase(){
 }
 function finish(){
  state='result';$('game').classList.remove('big-hit');
- if(outcome.distance>best){best=outcome.distance;try{localStorage.setItem('onlyai-best',String(best));}catch{}$('best').innerHTML=`${best} <small>m</small>`;}
+ if(outcome.distance>best){$('recordNotice').hidden=false;best=outcome.distance;try{localStorage.setItem('onlyai-best',String(best));}catch{}$('best').innerHTML=`${best} <small>m</small>`;}
  $('result').textContent=outcome.distance?`${outcome.distance} m · ${isBigHit(outcome.distance)?'장타! ':''}${outcome.grade}`:'헛스윙!';
  $('buttonText').textContent='다시 도전';
+ $('lastDistance').innerHTML=`${outcome.distance} <small>m</small>`;
+ $('lastTiming').innerHTML=`${Math.round((outcome.timing||0)*100)} <small>%</small>`;
+ $('lastContact').innerHTML=`${Math.round((outcome.contact||0)*100)} <small>%</small>`;
+ $('lastGrade').textContent=outcome.grade||'헛스윙!';
 }
+function updateMute(){
+ $('mute').textContent=muted?'소리 OFF':'소리 ON';$('mute').setAttribute('aria-pressed',String(muted));$('mute').setAttribute('aria-label',muted?'효과음 켜기':'효과음 끄기');
+}
+updateMute();
+$('mute').addEventListener('click',()=>{muted=!muted;try{localStorage.setItem('onlyai-muted',String(muted));}catch{}updateMute();});
 $('game').addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;action();});
 $('swing').addEventListener('click',action);
 window.addEventListener('keydown',e=>{if(e.code==='Space'&&!e.repeat&&!e.target.closest('button')){e.preventDefault();action();}});
@@ -81,6 +92,11 @@ function frame(ms){
   }
   if(t>shotEndTime(outcome))finish();
  }
+ const impactAge=now-flightAt;
+ const contactVisible=state==='flight'&&outcome?.distance>0&&impactAge>=0&&impactAge<.55;
+ $('contactBadge').hidden=!contactVisible;
+ if(contactVisible)$('contactBadge').textContent=outcome.distance>=125?'PERFECT!':outcome.distance>=85?'NICE SHOT!':'HIT!';
+ $('impactFlash').hidden=!(contactVisible&&impactAge<.18&&!reducedMotion);
  const track=isTrackedHit(outcome)&&(state==='flight'||state==='result')&&now>=flightAt;
  $('shotTracker').hidden=!track;
  if(track){
