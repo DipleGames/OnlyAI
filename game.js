@@ -59,10 +59,7 @@ function finish(){
  if(outcome.distance>best){$('recordNotice').hidden=false;best=outcome.distance;try{localStorage.setItem('onlyai-best',String(best));}catch{}$('best').innerHTML=`${best} <small>m</small>`;}
  $('result').textContent=outcome.distance?`${outcome.distance} m · ${isBigHit(outcome.distance)?'장타! ':''}${outcome.grade}`:'헛스윙!';
  $('buttonText').textContent='다시 도전';
- $('lastDistance').innerHTML=`${outcome.distance} <small>m</small>`;
- $('lastTiming').innerHTML=`${Math.round((outcome.timing||0)*100)} <small>%</small>`;
- $('lastContact').innerHTML=`${Math.round((outcome.contact||0)*100)} <small>%</small>`;
- $('lastGrade').textContent=outcome.grade||'헛스윙!';
+
 }
 function updateMute(){
  $('mute').textContent=muted?'소리 OFF':'소리 ON';$('mute').setAttribute('aria-pressed',String(muted));$('mute').setAttribute('aria-label',muted?'효과음 켜기':'효과음 끄기');
@@ -92,11 +89,6 @@ function frame(ms){
   }
   if(t>shotEndTime(outcome))finish();
  }
- const impactAge=now-flightAt;
- const contactVisible=state==='flight'&&outcome?.distance>0&&impactAge>=0&&impactAge<.55;
- $('contactBadge').hidden=!contactVisible;
- if(contactVisible)$('contactBadge').textContent=outcome.distance>=125?'PERFECT!':outcome.distance>=85?'NICE SHOT!':'HIT!';
- $('impactFlash').hidden=!(contactVisible&&impactAge<.18&&!reducedMotion);
  const track=isTrackedHit(outcome)&&(state==='flight'||state==='result')&&now>=flightAt;
  $('shotTracker').hidden=!track;
  if(track){
